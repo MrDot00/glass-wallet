@@ -75,28 +75,43 @@ const App: React.FC = () => {
   };
 
   const resetMonth = async () => {
-  if (window.confirm("Reset Month? This will clear all transactions and restore the Daily Allowance to ৳600.")) {
-    const updatedBuckets = buckets.map(b => b.id === 'daily' ? { ...b, target: 600 } : b);
+  if (window.confirm("Reset Month? This clears transactions but KEEPS your Extra Savings.")) {
+    
+    const cleanedBuckets = buckets.map(b => {
+      // If it's the Savings bucket, DO NOT reset the current amount
+      if (b.id === 'extra_savings' || b.name.toLowerCase().includes('savings')) {
+        return { 
+          ...b, 
+          isPaid: false // Keep the money, just reset the 'paid' checkmark
+        };
+      }
+
+      // For all other buckets, reset them to zero
+      return {
+        ...b,
+        current: 0,
+        isPaid: false,
+        target: b.id === 'daily' ? 600 : b.target
+      };
+    });
     
     try {
-      // 1. Tell the Backend to wipe the transactions in MongoDB
       await fetch('/.netlify/functions/api', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           action: 'RESET', 
-          buckets: updatedBuckets 
+          buckets: cleanedBuckets 
         }),
       });
 
-      // 2. Update your screen locally so you don't have to refresh
-      setBuckets(updatedBuckets);
+      setBuckets(cleanedBuckets);
       setTransactions([]); 
       
-      alert("Month Reset Successfully!");
+      alert("Month Reset! Savings preserved.");
     } catch (err) {
       console.error("Reset failed:", err);
-      alert("Failed to reset data on the server.");
+      alert("Failed to reset data.");
     }
   }
 };
