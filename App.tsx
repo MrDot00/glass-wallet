@@ -74,13 +74,32 @@ const App: React.FC = () => {
     syncWithDatabase(updated, transactions);
   };
 
-  const resetMonth = () => {
-    if (window.confirm("Reset Month? This restores the Daily Allowance limit to ৳600.")) {
-      const updated = buckets.map(b => b.id === 'daily' ? { ...b, target: 600 } : b);
-      setBuckets(updated);
-      syncWithDatabase(updated, transactions);
+  const resetMonth = async () => {
+  if (window.confirm("Reset Month? This will clear all transactions and restore the Daily Allowance to ৳600.")) {
+    const updatedBuckets = buckets.map(b => b.id === 'daily' ? { ...b, target: 600 } : b);
+    
+    try {
+      // 1. Tell the Backend to wipe the transactions in MongoDB
+      await fetch('/.netlify/functions/api', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'RESET', 
+          buckets: updatedBuckets 
+        }),
+      });
+
+      // 2. Update your screen locally so you don't have to refresh
+      setBuckets(updatedBuckets);
+      setTransactions([]); 
+      
+      alert("Month Reset Successfully!");
+    } catch (err) {
+      console.error("Reset failed:", err);
+      alert("Failed to reset data on the server.");
     }
-  };
+  }
+};
 
   const handleIncome = () => {
     const amount = parseFloat(amountInput);
