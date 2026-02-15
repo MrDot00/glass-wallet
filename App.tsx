@@ -187,74 +187,75 @@ const App: React.FC = () => {
   };
 
   const handleSpend = () => {
-  const amount = parseFloat(amountInput);
-  if (isNaN(amount) || amount <= 0) return;
+    const amount = parseFloat(amountInput);
+    if (isNaN(amount) || amount <= 0) return;
 
-  const daily = buckets.find(b => b.id === 'daily')!;
-  const savings = buckets.find(b => b.id === 'extra_savings')!; // Make sure ID matches your savings bucket
+    const daily = buckets.find(b => b.id === 'daily')!;
+    // FIXED: Changed 'extra_savings' to 'savings' to match your database ID
+    const savings = buckets.find(b => b.id === 'savings')!; 
 
-  // 1. Calculate TOTAL money available
-  const totalAvailable = daily.current + savings.current;
+    // 1. Calculate TOTAL money available
+    const totalAvailable = daily.current + savings.current;
 
-  // 2. Check if you have enough money
-  if (amount > totalAvailable) {
-    // NEW: This shows a beautiful red error bubble!
-    toast.error("Insufficient funds! Check Daily & Savings.", {
-      style: { background: '#333', color: '#fff' }
-    });
-    return;
-  }
+    // 2. Check if you have enough money
+    if (amount > totalAvailable) {
+      toast.error("Insufficient funds! Check Daily & Savings.", {
+        style: { background: '#333', color: '#fff' }
+      });
+      return;
+    }
 
-  let nextBuckets: Bucket[];
+    let nextBuckets: Bucket[];
 
-  if (amount <= 100) {
-    if (daily.current >= amount) {
-      nextBuckets = buckets.map(b => 
-        b.id === 'daily' 
-          ? { ...b, current: b.current - amount, target: Math.max(0, (b.target || 600) - amount) } 
-          : b
-      );
+    if (amount <= 100) {
+      if (daily.current >= amount) {
+        nextBuckets = buckets.map(b => 
+          b.id === 'daily' 
+            ? { ...b, current: b.current - amount, target: Math.max(0, (b.target || 600) - amount) } 
+            : b
+        );
+      } else {
+        const fromDaily = daily.current;
+        const fromSavings = amount - fromDaily;
+        nextBuckets = buckets.map(b => {
+          if (b.id === 'daily') return { ...b, current: 0, target: Math.max(0, (b.target || 600) - fromDaily) };
+          // FIXED: Changed 'extra_savings' to 'savings'
+          if (b.id === 'savings') return { ...b, current: b.current - fromSavings };
+          return b;
+        });
+      }
     } else {
-      const fromDaily = daily.current;
+      const fromDaily = Math.min(daily.current, 100);
       const fromSavings = amount - fromDaily;
+
       nextBuckets = buckets.map(b => {
-        if (b.id === 'daily') return { ...b, current: 0, target: Math.max(0, (b.target || 600) - fromDaily) };
-        if (b.id === 'extra_savings') return { ...b, current: b.current - fromSavings };
+        if (b.id === 'daily') return { ...b, current: b.current - fromDaily, target: Math.max(0, (b.target || 600) - fromDaily) };
+        // FIXED: Changed 'extra_savings' to 'savings'
+        if (b.id === 'savings') return { ...b, current: b.current - fromSavings };
         return b;
       });
     }
-  } else {
-    const fromDaily = Math.min(daily.current, 100);
-    const fromSavings = amount - fromDaily;
 
-    nextBuckets = buckets.map(b => {
-      if (b.id === 'daily') return { ...b, current: b.current - fromDaily, target: Math.max(0, (b.target || 600) - fromDaily) };
-      if (b.id === 'extra_savings') return { ...b, current: b.current - fromSavings };
-      return b;
+    const newTx: Transaction = {
+      id: Math.random().toString(36).substr(2, 9),
+      type: 'spend',
+      amount,
+      timestamp: new Date(),
+      note: noteInput || 'Purchased Item'
+    };
+    const nextTxs = [newTx, ...transactions];
+    setBuckets(nextBuckets);
+    setTransactions(nextTxs);
+    syncWithDatabase(nextBuckets, nextTxs);
+
+    setAmountInput('');
+    setNoteInput('');
+    
+    toast.success("Transaction Added!", {
+      icon: '💸',
+      style: { background: '#333', color: '#fff' }
     });
-  }
-
-  const newTx: Transaction = {
-    id: Math.random().toString(36).substr(2, 9),
-    type: 'spend',
-    amount,
-    timestamp: new Date(),
-    note: noteInput || 'Purchased Item'
   };
-  const nextTxs = [newTx, ...transactions];
-  setBuckets(nextBuckets);
-  setTransactions(nextTxs);
-  syncWithDatabase(nextBuckets, nextTxs);
-
-  setAmountInput('');
-  setNoteInput('');
-  
-  // NEW: A green success bubble!
-  toast.success("Transaction Added!", {
-    icon: '💸',
-    style: { background: '#333', color: '#fff' }
-  });
-};
   const aiComment = useMemo(() => {
     const rent = buckets.find(b => b.id === 'rent')!;
     const vape = buckets.find(b => b.id === 'vape')!;
