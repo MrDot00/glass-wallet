@@ -1,16 +1,13 @@
 import { setServers } from 'node:dns/promises';
-setServers(['1.1.1.1', '8.8.8.8']);
+// Set DNS servers to prevent connection timeout issues in some environments
+try {
+  setServers(['1.1.1.1', '8.8.8.8']);
+} catch (e) {
+  console.log("DNS setServers not supported in this environment");
+}
 
-import { Handler } from '@netlify/functions';
+import { Handler, HandlerEvent, HandlerContext } from '@netlify/functions';
 import { MongoClient, ServerApiVersion } from 'mongodb';
-
-/**
- * CONFIGURATION INSTRUCTIONS:
- * 1. Go to Netlify Dashboard > Site Settings > Build & Deploy > Environment
- * 2. Add a variable: MONGODB_URI
- * 3. Value: mongodb+srv://mahian:<YOUR_PASSWORD>@wallet.kqa5yvr.mongodb.net/?appName=Wallet
- * (Replace <YOUR_PASSWORD> with your actual MongoDB password)
- */
 
 const uri = process.env.MONGODB_URI || "";
 let cachedClient: MongoClient | null = null;
@@ -18,8 +15,8 @@ let cachedClient: MongoClient | null = null;
 async function getClient() {
   if (cachedClient) return cachedClient;
   
-  if (!uri || uri.includes('<db_password>') || uri.includes('<YOUR_PASSWORD>')) {
-    throw new Error("MONGODB_URI is not configured correctly. Please set your password in the Netlify environment variables.");
+  if (!uri || uri.includes('<YOUR_PASSWORD>')) {
+    throw new Error("MONGODB_URI is not configured correctly in Netlify.");
   }
 
   const client = new MongoClient(uri, {
@@ -35,7 +32,8 @@ async function getClient() {
   return client;
 }
 
-export const handler: Handler = async (event) => {
+// Fixed the (event) error by adding the correct types from @netlify/functions
+export const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
   try {
     const client = await getClient();
     const db = client.db("glass_wallet");
@@ -46,14 +44,16 @@ export const handler: Handler = async (event) => {
       const data = await collection.findOne({ _id: DOC_ID as any });
       return {
         statusCode: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*" 
+        },
         body: JSON.stringify(data || null),
       };
     }
 
     if (event.httpMethod === 'POST') {
       const payload = JSON.parse(event.body || "{}");
-      // Remove _id from payload if it exists to prevent immutable field errors
       const { _id, ...updateData } = payload;
       
       await collection.updateOne(
@@ -69,7 +69,10 @@ export const handler: Handler = async (event) => {
       
       return {
         statusCode: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*"
+        },
         body: JSON.stringify({ message: "Success" }),
       };
     }
@@ -85,7 +88,6 @@ export const handler: Handler = async (event) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
         error: error.message || "Database connection failed",
-        hint: "Check your Netlify environment variables for MONGODB_URI"
       }),
     };
   }
