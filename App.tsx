@@ -1,3 +1,5 @@
+import toast, { Toaster } from 'react-hot-toast';
+
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
@@ -185,55 +187,74 @@ const App: React.FC = () => {
   };
 
   const handleSpend = () => {
-    const amount = parseFloat(amountInput);
-    if (isNaN(amount) || amount <= 0) return;
+  const amount = parseFloat(amountInput);
+  if (isNaN(amount) || amount <= 0) return;
 
-    const daily = buckets.find(b => b.id === 'daily')!;
-    const savings = buckets.find(b => b.id === 'savings')!;
+  const daily = buckets.find(b => b.id === 'daily')!;
+  const savings = buckets.find(b => b.id === 'extra_savings')!; // Make sure ID matches your savings bucket
 
-    let nextBuckets: Bucket[] | null = null;
+  // 1. Calculate TOTAL money available
+  const totalAvailable = daily.current + savings.current;
 
-    if (amount <= 100) {
-      if (daily.current < amount) {
-        alert("⚠️ Insufficient Daily Allowance!");
-        return;
-      }
+  // 2. Check if you have enough money
+  if (amount > totalAvailable) {
+    // NEW: This shows a beautiful red error bubble!
+    toast.error("Insufficient funds! Check Daily & Savings.", {
+      style: { background: '#333', color: '#fff' }
+    });
+    return;
+  }
+
+  let nextBuckets: Bucket[];
+
+  if (amount <= 100) {
+    if (daily.current >= amount) {
       nextBuckets = buckets.map(b => 
         b.id === 'daily' 
           ? { ...b, current: b.current - amount, target: Math.max(0, (b.target || 600) - amount) } 
           : b
       );
     } else {
-      const extra = amount - 100;
-      if (daily.current < 100 || savings.current < extra) {
-        alert("⚠️ Insufficient funds across Daily Allowance and Extra Savings!");
-        return;
-      }
+      const fromDaily = daily.current;
+      const fromSavings = amount - fromDaily;
       nextBuckets = buckets.map(b => {
-        if (b.id === 'daily') return { ...b, current: b.current - 100, target: Math.max(0, (b.target || 600) - 100) };
-        if (b.id === 'savings') return { ...b, current: b.current - extra };
+        if (b.id === 'daily') return { ...b, current: 0, target: Math.max(0, (b.target || 600) - fromDaily) };
+        if (b.id === 'extra_savings') return { ...b, current: b.current - fromSavings };
         return b;
       });
     }
+  } else {
+    const fromDaily = Math.min(daily.current, 100);
+    const fromSavings = amount - fromDaily;
 
-    if (nextBuckets) {
-      const newTx: Transaction = {
-        id: Math.random().toString(36).substr(2, 9),
-        type: 'spend',
-        amount,
-        timestamp: new Date(),
-        note: noteInput || 'Purchased Item'
-      };
-      const nextTxs = [newTx, ...transactions];
-      setBuckets(nextBuckets);
-      setTransactions(nextTxs);
-      syncWithDatabase(nextBuckets, nextTxs);
-    }
+    nextBuckets = buckets.map(b => {
+      if (b.id === 'daily') return { ...b, current: b.current - fromDaily, target: Math.max(0, (b.target || 600) - fromDaily) };
+      if (b.id === 'extra_savings') return { ...b, current: b.current - fromSavings };
+      return b;
+    });
+  }
 
-    setAmountInput('');
-    setNoteInput('');
+  const newTx: Transaction = {
+    id: Math.random().toString(36).substr(2, 9),
+    type: 'spend',
+    amount,
+    timestamp: new Date(),
+    note: noteInput || 'Purchased Item'
   };
+  const nextTxs = [newTx, ...transactions];
+  setBuckets(nextBuckets);
+  setTransactions(nextTxs);
+  syncWithDatabase(nextBuckets, nextTxs);
 
+  setAmountInput('');
+  setNoteInput('');
+  
+  // NEW: A green success bubble!
+  toast.success("Transaction Added!", {
+    icon: '💸',
+    style: { background: '#333', color: '#fff' }
+  });
+};
   const aiComment = useMemo(() => {
     const rent = buckets.find(b => b.id === 'rent')!;
     const vape = buckets.find(b => b.id === 'vape')!;
@@ -485,6 +506,8 @@ const App: React.FC = () => {
           <span className="text-[10px] font-bold uppercase tracking-widest">Methodology: Waterfall + Shrinking Cap</span>
         </div>
       </footer>
+
+      <Toaster position="bottom-center" reverseOrder={false} />
     </div>
   );
 };
